@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STOCKVAULT — Inventory Value</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@300;400;500&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body data-page="inv-value">
+
+<!-- shared partials injected by init.js -->
+<div id="nav-slot"></div>
+<div id="toast-slot"></div>
+<div id="modal-slot"></div>
+
+<!-- PAGE -->
+<div class="page active">
+  <div class="breadcrumb">Home / <span>Inventory Value</span></div>
+  <div class="page-header">
+    <h1>Inventory Value</h1>
+    <p>Total value computed from current price × quantity for each product</p>
+  </div>
+
+  <div class="value-summary" id="valueSummary"></div>
+
+  <div class="chart-container">
+    <h3>Value by Category</h3>
+    <canvas id="valueChart" height="180"></canvas>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Product</th><th>SKU</th><th>Price</th><th>QTY</th>
+          <th>Stock Value</th><th>% of Total</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="valueBody"></tbody>
+      <tfoot>
+        <tr style="background:var(--surface2)">
+          <td colspan="4" style="padding:14px 16px;font-family:var(--font-display);font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:13px">GRAND TOTAL</td>
+          <td style="padding:14px 16px;font-family:var(--font-display);font-size:20px;font-weight:800;color:var(--accent)" id="grandTotal"></td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+</div>
+
+<!-- scripts -->
+<script src="js/data.js"></script>
+<script src="js/nav.js"></script>
+<script src="js/toast.js"></script>
+<script src="js/seed.js"></script>
+<script src="js/value.js"></script>
+<script src="js/init.js"></script>
+</body>
+</html>
