@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Low Stock Alerts — StockVault{% endblock %}
+{% block breadcrumb %}Low Stock Alerts{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex;align-items:flex-end;justify-content:space-between">
+  <div>
+    <h1 class="page-title">Low Stock Alerts</h1>
+    <p class="page-subtitle">
+      {% if alerts %}
+        {{ alerts|length }} product{{ 's' if alerts|length != 1 }} need restocking — act before you run out
+      {% else %}
+        All products are well-stocked — nothing to worry about!
+      {% endif %}
+    </p>
+  </div>
+  <a href="{{ url_for('update_stock') }}" class="btn btn-primary btn-sm">Update Stock</a>
+</div>
+
+{% if alerts %}
+<div class="alert-grid">
+  {% for r, s in alerts %}
+  {% set severity = 'critical' if s == 'low' else 'medium-alert' %}
+  <div class="alert-card {{ severity }}">
+    <div class="alert-card-photo">
+      {% if r.photo %}
+        <img src="data:image/jpeg;base64,{{ r.photo }}" alt="{{ r.name }}">
+      {% else %}
+        <svg width="32" height="32" fill="none" stroke="var(--border2)" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>
+      {% endif %}
+    </div>
+    <div class="alert-card-body">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <span class="badge badge-{{ s }}">{{ 'Critical' if s == 'low' else 'Warning' }}</span>
+        <span style="font-family:var(--font-mono);font-size:.6rem;color:var(--muted)">{{ r.sku }}</span>
+      </div>
+      <div class="alert-card-name">{{ r.name }}</div>
+      <div class="alert-card-sku">{{ r.category or 'Uncategorized' }}</div>
+      <div class="alert-stats">
+        <div>
+          <div class="alert-stat-label">Current Qty</div>
+          <div class="alert-stat-value qty">{{ r.quantity }}</div>
+        </div>
+        <div>
+          <div class="alert-stat-label">Min. Level</div>
+          <div class="alert-stat-value" style="color:var(--muted)">{{ r.low_threshold }}</div>
+        </div>
+        <div>
+          <div class="alert-stat-label">Price</div>
+          <div class="alert-stat-value" style="font-size:1rem;color:var(--text)">₱{{ "%.2f"|format(r.price) }}</div>
+        </div>
+      </div>
+      <a href="{{ url_for('update_stock') }}" class="btn btn-primary btn-sm" style="width:100%;justify-content:center">
+        Restock Now →
+      </a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="table-wrap">
+  <div class="empty-state">
+    <svg width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>
+    <p style="margin-top:10px;font-size:1rem;font-weight:700;color:var(--text)">All clear!</p>
+    <p>No products are running low right now.</p>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — StockVault{% endblock %}
+{% block breadcrumb %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Dashboard</h1>
+  <p class="page-subtitle">Welcome back — here's your inventory at a glance</p>
+</div>
+
+<!-- Stat cards -->
+<div class="stat-grid">
+  <div class="stat-card card-in_stock">
+    <div class="card-label">In Stock</div>
+    <div class="card-value">{{ counts.in_stock }}</div>
+    <div style="font-size:.75rem;color:var(--muted);margin-top:8px">products healthy</div>
+    <div class="card-bar"></div>
+  </div>
+  <div class="stat-card card-medium">
+    <div class="card-label">Medium</div>
+    <div class="card-value">{{ counts.medium }}</div>
+    <div style="font-size:.75rem;color:var(--muted);margin-top:8px">monitor closely</div>
+    <div class="card-bar"></div>
+  </div>
+  <div class="stat-card card-low">
+    <div class="card-label">Low Stock</div>
+    <div class="card-value">{{ counts.low }}</div>
+    <div style="font-size:.75rem;color:var(--muted);margin-top:8px">need restocking</div>
+    <div class="card-bar"></div>
+  </div>
+</div>
+
+<!-- Quick actions -->
+<div style="display:flex;gap:12px;margin-bottom:28px">
+  <a href="{{ url_for('add_product') }}" class="btn btn-primary">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    Add Product
+  </a>
+  <a href="{{ url_for('update_stock') }}" class="btn btn-ghost">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48 2.83 2.83M2 12h4m12 0h4"/></svg>
+    Update Stock
+  </a>
+  <a href="{{ url_for('inventory') }}" class="btn btn-ghost">View All</a>
+</div>
+
+<!-- Bottom grid -->
+<div class="dash-bottom">
+  <!-- Recent products -->
+  <div class="card-section">
+    <div class="card-section-header">
+      <span class="card-section-title">Recent Products</span>
+      <a href="{{ url_for('inventory') }}" class="card-section-link">VIEW ALL →</a>
+    </div>
+    {% for r in recent %}
+    {% set s = status(r.quantity, r.low_threshold, r.med_threshold) %}
+    <div class="recent-row">
+      <div>
+        <div class="recent-name">{{ r.name }}</div>
+        <div class="recent-sku">{{ r.sku }}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px">
+        <span style="font-family:var(--font-mono);font-size:.8rem">{{ r.quantity }} units</span>
+        <span class="badge badge-{{ s }}">{{ s.replace('_',' ') }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Low stock alerts -->
+  <div class="card-section">
+    <div class="card-section-header">
+      <span class="card-section-title">Low Stock Alerts</span>
+      <a href="{{ url_for('low_stock') }}" class="card-section-link">VIEW ALL →</a>
+    </div>
+    {% if low_items %}
+      {% for r in low_items %}
+      <div class="low-alert-row">
+        <div class="low-icon">{{ r.quantity }}</div>
+        <div class="low-info">
+          <div class="low-name">{{ r.name }}</div>
+          <div class="low-qty">{{ r.quantity }} remaining — restock now</div>
+        </div>
+        <a href="{{ url_for('update_stock') }}" class="btn btn-danger btn-xs">Fix</a>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state" style="padding:30px">
+        <p>No low stock items — great!</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Recent activity -->
+<div class="card-section" style="margin-top:20px">
+  <div class="card-section-header">
+    <span class="card-section-title">Recent Activity</span>
+    <a href="{{ url_for('activity_log') }}" class="card-section-link">VIEW ALL →</a>
+  </div>
+  {% if recent_logs %}
+    {% for log in recent_logs %}
+    <div class="recent-row">
+      <div style="display:flex;align-items:center;gap:12px">
+        {% if log.action == 'ADD' %}<span class="badge badge-in_stock">ADD</span>
+        {% elif log.action == 'EDIT' %}<span class="badge badge-medium">EDIT</span>
+        {% elif log.action == 'DELETE' %}<span class="badge badge-low">DEL</span>
+        {% elif log.action == 'STOCK' %}<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-family:var(--font-mono);font-size:.62rem;letter-spacing:.05em;text-transform:uppercase;font-weight:700;background:rgba(99,179,237,.1);color:#63b3ed;border:1px solid rgba(99,179,237,.25)">STK</span>
+        {% else %}<span class="badge">{{ log.action }}</span>{% endif %}
+        <div>
+          <div style="font-weight:600;font-size:.84rem">{{ log.product_name or '—' }}</div>
+          <div style="font-size:.74rem;color:var(--muted)">{{ log.details }}</div>
+        </div>
+      </div>
+      <span style="font-family:var(--font-mono);font-size:.62rem;color:var(--muted);white-space:nowrap">{{ log.timestamp }}</span>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty-state" style="padding:24px"><p>No activity yet.</p></div>
+  {% endif %}
+</div>
+{% endblock %}

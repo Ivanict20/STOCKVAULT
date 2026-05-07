@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Activity Log — StockVault{% endblock %}
+{% block breadcrumb %}Activity Log{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex;align-items:flex-end;justify-content:space-between">
+  <div>
+    <h1 class="page-title">Activity Log</h1>
+    <p class="page-subtitle">{{ total_rows }} total event{{ 's' if total_rows != 1 }} — every add, edit, stock change, and delete</p>
+  </div>
+  <a href="{{ url_for('export_csv') }}" class="btn btn-ghost btn-sm">
+    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    Export CSV
+  </a>
+</div>
+
+{% if logs %}
+<div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Action</th>
+        <th>Product</th>
+        <th>Details</th>
+        <th>Timestamp</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for log in logs %}
+      <tr>
+        <td class="mono" style="color:var(--muted)">{{ log.id }}</td>
+        <td>
+          {% if log.action == 'ADD' %}
+            <span class="badge badge-in_stock">ADD</span>
+          {% elif log.action == 'EDIT' %}
+            <span class="badge badge-medium">EDIT</span>
+          {% elif log.action == 'STOCK' %}
+            <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-family:var(--font-mono);font-size:.62rem;letter-spacing:.05em;text-transform:uppercase;font-weight:700;background:rgba(99,179,237,.1);color:#63b3ed;border:1px solid rgba(99,179,237,.25)">STOCK</span>
+          {% elif log.action == 'DELETE' %}
+            <span class="badge badge-low">DELETE</span>
+          {% elif log.action == 'EXPORT' %}
+            <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-family:var(--font-mono);font-size:.62rem;letter-spacing:.05em;text-transform:uppercase;font-weight:700;background:rgba(154,117,234,.1);color:#9a75ea;border:1px solid rgba(154,117,234,.25)">EXPORT</span>
+          {% else %}
+            <span class="badge">{{ log.action }}</span>
+          {% endif %}
+        </td>
+        <td class="bold">{{ log.product_name or '—' }}</td>
+        <td style="color:var(--muted);font-size:.8rem;max-width:320px">{{ log.details or '—' }}</td>
+        <td class="mono" style="white-space:nowrap">{{ log.timestamp }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-top:20px">
+  <span style="font-family:var(--font-mono);font-size:.68rem;color:var(--muted)">
+    Page {{ page }} of {{ total_pages }}
+  </span>
+  <div style="display:flex;gap:8px">
+    {% if page > 1 %}
+    <a href="{{ url_for('activity_log', page=page-1) }}" class="btn btn-ghost btn-sm">← Prev</a>
+    {% endif %}
+    {% if page < total_pages %}
+    <a href="{{ url_for('activity_log', page=page+1) }}" class="btn btn-ghost btn-sm">Next →</a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% else %}
+<div class="table-wrap">
+  <div class="empty-state">
+    <svg width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+    <p style="margin-top:10px">No activity recorded yet. Start adding or editing products!</p>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

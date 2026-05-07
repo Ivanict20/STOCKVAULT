@@ -1,0 +1,263 @@
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, Response
+import sqlite3, os, base64, csv, io
+from datetime import datetime
+
+app = Flask(__name__)
+app.secret_key = "stockvault-secret-2024"
+DB = "database.db"
+
+def get_db():
+    conn = sqlite3.connect(DB)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    with get_db() as db:
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS products (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                name      TEXT NOT NULL,
+                sku       TEXT NOT NULL UNIQUE,
+                category  TEXT,
+                price     REAL NOT NULL DEFAULT 0,
+                quantity  INTEGER NOT NULL DEFAULT 0,
+                low_threshold  INTEGER NOT NULL DEFAULT 10,
+                med_threshold  INTEGER NOT NULL DEFAULT 25,
+                photo     BLOB,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS activity_log (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                action       TEXT NOT NULL,
+                product_id   INTEGER,
+                product_name TEXT,
+                details      TEXT,
+                timestamp    TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        count = db.execute("SELECT COUNT(*) FROM products").fetchone()[0]
+        if count == 0:
+            demo = [
+                ("Wireless Keyboard", "SKU-001", "Electronics", 49.99, 82, 10, 25),
+                ("USB-C Hub",         "SKU-002", "Electronics", 34.50, 15, 10, 25),
+                ("Desk Lamp",         "SKU-003", "Furniture",   28.00,  7, 10, 25),
+                ("Notebook A5",       "SKU-004", "Stationery",  12.00, 63, 10, 25),
+                ("Ballpoint Pens x10","SKU-005", "Stationery",   8.75,  3, 10, 25),
+                ("Monitor Stand",     "SKU-006", "Furniture",   55.00, 19, 10, 25),
+                ("HDMI Cable 2m",     "SKU-007", "Electronics", 14.99, 44, 10, 25),
+                ("Mouse Pad XL",      "SKU-008", "Accessories", 22.00,  8, 10, 25),
+            ]
+            for d in demo:
+                db.execute(
+                    "INSERT INTO products (name,sku,category,price,quantity,low_threshold,med_threshold) VALUES (?,?,?,?,?,?,?)",
+                    d
+                )
+
+def status(qty, low, med):
+    if qty <= low:  return "low"
+    if qty <= med:  return "medium"
+    return "in_stock"
+
+def log_activity(action, product_id, product_name, details):
+    with get_db() as db:
+        db.execute(
+            "INSERT INTO activity_log (action, product_id, product_name, details) VALUES (?,?,?,?)",
+            (action, product_id, product_name, details)
+        )
+
+@app.route("/")
+def dashboard():
+    db = get_db()
+    rows = db.execute("SELECT * FROM products").fetchall()
+    counts = {"in_stock": 0, "medium": 0, "low": 0}
+    for r in rows:
+        counts[status(r["quantity"], r["low_threshold"], r["med_threshold"])] += 1
+    low_items   = [r for r in rows if status(r["quantity"], r["low_threshold"], r["med_threshold"]) == "low"][:3]
+    recent      = list(rows)[-4:]
+    recent_logs = db.execute("SELECT * FROM activity_log ORDER BY id DESC LIMIT 5").fetchall()
+    return render_template("dashboard.html", counts=counts, low_items=low_items,
+                           recent=recent, status=status, recent_logs=recent_logs)
+
+@app.route("/add-product", methods=["GET","POST"])
+def add_product():
+    if request.method == "POST":
+        name  = request.form["name"].strip()
+        sku   = request.form["sku"].strip()
+        cat   = request.form["category"].strip()
+        price = float(request.form["price"] or 0)
+        qty   = int(request.form["quantity"] or 0)
+        low_t = int(request.form["low_threshold"] or 10)
+        med_t = int(request.form["med_threshold"] or 25)
+        photo = None
+        if "photo" in request.files:
+            f = request.files["photo"]
+            if f and f.filename:
+                photo = base64.b64encode(f.read()).decode()
+        try:
+            with get_db() as db:
+                db.execute(
+                    "INSERT INTO products (name,sku,category,price,quantity,low_threshold,med_threshold,photo) VALUES (?,?,?,?,?,?,?,?)",
+                    (name, sku, cat, price, qty, low_t, med_t, photo)
+                )
+            log_activity("ADD", None, name, f"Added '{name}' ({sku}) qty={qty} price=P{price:.2f}")
+            flash("Product added successfully!", "success")
+            return redirect(url_for("inventory"))
+        except sqlite3.IntegrityError:
+            flash(f"SKU '{sku}' already exists.", "error")
+    return render_template("add_product.html")
+
+@app.route("/edit/<int:pid>", methods=["GET","POST"])
+def edit_product(pid):
+    db      = get_db()
+    product = db.execute("SELECT * FROM products WHERE id=?", (pid,)).fetchone()
+    if not product:
+        flash("Product not found.", "error")
+        return redirect(url_for("inventory"))
+
+    if request.method == "POST":
+        name  = request.form["name"].strip()
+        sku   = request.form["sku"].strip()
+        cat   = request.form["category"].strip()
+        price = float(request.form["price"] or 0)
+        qty   = int(request.form["quantity"] or 0)
+        low_t = int(request.form["low_threshold"] or 10)
+        med_t = int(request.form["med_threshold"] or 25)
+        photo = product["photo"]
+        if "photo" in request.files:
+            f = request.files["photo"]
+            if f and f.filename:
+                photo = base64.b64encode(f.read()).decode()
+        try:
+            with get_db() as db:
+                db.execute("""
+                    UPDATE products
+                    SET name=?, sku=?, category=?, price=?, quantity=?,
+                        low_threshold=?, med_threshold=?, photo=?
+                    WHERE id=?
+                """, (name, sku, cat, price, qty, low_t, med_t, photo, pid))
+            changes = []
+            if product["name"]     != name:  changes.append(f"name: '{product['name']}' -> '{name}'")
+            if product["sku"]      != sku:   changes.append(f"sku: '{product['sku']}' -> '{sku}'")
+            if product["price"]    != price: changes.append(f"price: P{product['price']:.2f} -> P{price:.2f}")
+            if product["quantity"] != qty:   changes.append(f"qty: {product['quantity']} -> {qty}")
+            log_activity("EDIT", pid, name, "; ".join(changes) if changes else "No changes")
+            flash(f"'{name}' updated successfully!", "success")
+            return redirect(url_for("inventory"))
+        except sqlite3.IntegrityError:
+            flash(f"SKU '{sku}' is already taken by another product.", "error")
+
+    return render_template("edit_product.html", product=product, status=status)
+
+@app.route("/inventory")
+def inventory():
+    f      = request.args.get("filter", "all")
+    search = request.args.get("q", "").strip()
+    db     = get_db()
+    rows   = db.execute("SELECT * FROM products ORDER BY name").fetchall()
+    products = [(r, status(r["quantity"], r["low_threshold"], r["med_threshold"])) for r in rows]
+    if f != "all":
+        products = [(r, s) for r, s in products if s == f]
+    if search:
+        sl = search.lower()
+        products = [(r, s) for r, s in products
+                    if sl in r["name"].lower() or sl in (r["sku"] or "").lower()
+                    or sl in (r["category"] or "").lower()]
+    return render_template("inventory.html", products=products, filter=f, search=search)
+
+@app.route("/update-stock", methods=["GET"])
+def update_stock():
+    db = get_db()
+    rows = db.execute("SELECT * FROM products ORDER BY name").fetchall()
+    products = [(r, status(r["quantity"], r["low_threshold"], r["med_threshold"])) for r in rows]
+    return render_template("update_stock.html", products=products)
+
+@app.route("/update-stock/<int:pid>", methods=["POST"])
+def save_stock(pid):
+    qty = int(request.form.get("quantity", 0))
+    with get_db() as db:
+        row = db.execute("SELECT * FROM products WHERE id=?", (pid,)).fetchone()
+        db.execute("UPDATE products SET quantity=? WHERE id=?", (qty, pid))
+    log_activity("STOCK", pid, row["name"], f"Qty: {row['quantity']} -> {qty}")
+    flash("Stock updated.", "success")
+    return redirect(url_for("update_stock"))
+
+@app.route("/api/stock/<int:pid>", methods=["POST"])
+def api_stock(pid):
+    data = request.get_json()
+    qty  = max(0, int(data.get("quantity", 0)))
+    with get_db() as db:
+        row = db.execute("SELECT * FROM products WHERE id=?", (pid,)).fetchone()
+        old_qty = row["quantity"]
+        db.execute("UPDATE products SET quantity=? WHERE id=?", (qty, pid))
+    log_activity("STOCK", pid, row["name"], f"Qty: {old_qty} -> {qty}")
+    s = status(qty, row["low_threshold"], row["med_threshold"])
+    return jsonify({"ok": True, "quantity": qty, "status": s})
+
+@app.route("/low-stock")
+def low_stock():
+    db   = get_db()
+    rows = db.execute("SELECT * FROM products ORDER BY quantity ASC").fetchall()
+    alerts = []
+    for r in rows:
+        s = status(r["quantity"], r["low_threshold"], r["med_threshold"])
+        if s in ("low","medium"):
+            alerts.append((r, s))
+    return render_template("low_stock.html", alerts=alerts)
+
+@app.route("/inventory-value")
+def inventory_value():
+    db    = get_db()
+    rows  = db.execute("SELECT * FROM products ORDER BY name").fetchall()
+    total = sum(r["price"] * r["quantity"] for r in rows)
+    products = [(r, status(r["quantity"], r["low_threshold"], r["med_threshold"]),
+                 r["price"] * r["quantity"],
+                 (r["price"] * r["quantity"] / total * 100) if total else 0) for r in rows]
+    return render_template("inventory_value.html", products=products, total=total)
+
+@app.route("/delete/<int:pid>", methods=["POST"])
+def delete_product(pid):
+    with get_db() as db:
+        row = db.execute("SELECT * FROM products WHERE id=?", (pid,)).fetchone()
+        if row:
+            log_activity("DELETE", pid, row["name"], f"Deleted '{row['name']}' ({row['sku']})")
+            db.execute("DELETE FROM products WHERE id=?", (pid,))
+    flash("Product deleted.", "success")
+    return redirect(url_for("inventory"))
+
+@app.route("/export/csv")
+def export_csv():
+    db     = get_db()
+    rows   = db.execute("SELECT * FROM products ORDER BY name").fetchall()
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["ID","Name","SKU","Category","Price (P)","Quantity",
+                     "Status","Low Threshold","Med Threshold","Created At"])
+    for r in rows:
+        s = status(r["quantity"], r["low_threshold"], r["med_threshold"])
+        writer.writerow([r["id"], r["name"], r["sku"], r["category"] or "",
+                         f"{r['price']:.2f}", r["quantity"],
+                         s.replace("_"," ").title(),
+                         r["low_threshold"], r["med_threshold"], r["created_at"]])
+    log_activity("EXPORT", None, "—", "Inventory exported to CSV")
+    output.seek(0)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return Response(output.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=stockvault_{ts}.csv"})
+
+@app.route("/activity-log")
+def activity_log():
+    db         = get_db()
+    page       = int(request.args.get("page", 1))
+    per        = 20
+    total_rows = db.execute("SELECT COUNT(*) FROM activity_log").fetchone()[0]
+    logs       = db.execute("SELECT * FROM activity_log ORDER BY id DESC LIMIT ? OFFSET ?",
+                            (per, (page - 1) * per)).fetchall()
+    total_pages = max(1, (total_rows + per - 1) // per)
+    return render_template("activity_log.html", logs=logs, page=page,
+                           total_pages=total_pages, total_rows=total_rows)
+
+if __name__ == "__main__":
+    init_db()
+    app.run(debug=True, port=5050)
